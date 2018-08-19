@@ -3,10 +3,10 @@ import pygame, random
 # Global constants
 
 # Predefined colors
-background = (round(0.4*255),round(0.4*255),round(0.4*255))
-walls  = (0,0,0)
-playerColor = (round(0.85*255),round(0.325*255),round(0.0980*255))
-enemyColor = (0, round(0.4470*255), round(0.7410*255))
+BACKGROUND = (round(0.4*255),round(0.4*255),round(0.4*255))
+WALLS  = (0,0,0)
+PLAYER_COLOR = (round(0.85*255),round(0.325*255),round(0.0980*255))
+ENEMY_COLOR = (0, round(0.4470*255), round(0.7410*255))
 
 # Screen dimensions
 SCREEN_WIDTH = 640
@@ -103,7 +103,6 @@ class Player(pygame.sprite.Sprite):
         self.other_players = [player for player in self.level.players]
         self.other_players.remove(self)
 
-
     def collision_check_x(self):
         # Check collisions with the platforms
         block_hit_list = pygame.sprite.spritecollide(self, self.level.platform_list, False)
@@ -152,7 +151,6 @@ class Player(pygame.sprite.Sprite):
             # Stop our vertical movement
             self.change_y = 0
 
-
     def update(self):
         """ Move the player. """
 
@@ -166,7 +164,6 @@ class Player(pygame.sprite.Sprite):
         # Move up/down
         self.rect.y += self.change_y
         self.collision_check_y()
-
 
     def calc_grav(self):
         """ Calculate effect of gravity. """
@@ -217,7 +214,7 @@ class Player(pygame.sprite.Sprite):
 
     def choose_action(self):
         # Select a random action
-        self.action  = self.random_action()
+        self.action  = random_action()
 
         # Apply the random action
         if self.action is not None:
@@ -232,13 +229,19 @@ class Player(pygame.sprite.Sprite):
         else:
             self.stop()
 
-
-    def random_action(self):
-        """Pick random action."""
-        if random.random() < 0.5:
-            return random.choice(ACTIONS)
+    def act(self, action):
+        """Perform action."""
+        if action is not None:
+            if action == LEFT:
+                self.go_left()
+            elif action == RIGHT:
+                self.go_right()
+            elif action == JUMP:
+                self.jump()
+            elif action == SHOOT:
+                self.shoot()
         else:
-            return None
+            self.stop()
 
 
 class Platform(pygame.sprite.Sprite):
@@ -251,7 +254,7 @@ class Platform(pygame.sprite.Sprite):
         super().__init__()
 
         self.image = pygame.Surface([width, height])
-        self.image.fill(walls)
+        self.image.fill(WALLS)
 
         self.rect = self.image.get_rect()
 
@@ -266,7 +269,7 @@ class Level(object):
             collide with the player. """
         self.platform_list = pygame.sprite.Group()
         self.players = players
-        for p in players :
+        for p in players:
             p.level = self
             p.update_other_players()
 
@@ -290,11 +293,42 @@ class Level(object):
         self.bullet_list.update()
         self.player_list.update()
 
+    def get_states(self):
+        """Get the states of players, bullets.
+
+        Returns:
+            (list of tuple): each tuple has state of player and its bullet
+
+        """
+        states = []
+        for player in self.players:
+            player_state = (player.rect.x, player.rect.y,
+                          player.change_x, player.change_y)
+            if player.bullets:
+                bullet_state = (player.bullets[0].rect.x, player.bullets[0].rect.y,
+                                player.bullets[0].change_x, player.bullets[0].change_y)
+            else:
+                bullet_state = None
+            states.append((player_state, bullet_state))
+        return states
+
+    def get_scores(self):
+        """Get the scores of the players.
+
+        Returns:
+            (list): list with score of each player
+
+        """
+        scores = []
+        for player in self.players:
+            scores.append(player.score)
+        return scores
+
     def draw(self, screen):
         """ Draw everything on this level. """
 
         # Draw the background
-        screen.fill(background)
+        screen.fill(BACKGROUND)
 
         # Draw all the sprite lists that we have
         self.platform_list.draw(screen)
@@ -333,29 +367,28 @@ class Game:
 
     def __init__(self):
         """Constructor."""
-
-        # Can imagine this being re-used somehow if different games are created with
-        # different setups
-
         # Create the players
-        player_a = Player(RED)
-        player_b = Player(BLUE)
-        self.players = [player_a, player_b]
+        self.players = [Player(PLAYER_COLOR,[300, 80]), Player(ENEMY_COLOR,[500, 80])]
 
         # Create the level
         self.level = SimpleLevel(self.players)
 
-        # Update each player's list of other players
-        for player in self.players:
-            player.update_others_list()
-
     def step(self, actions):
         """Step through one iteration of the game."""
-        self.level.update()
+        for idx, player in enumerate(self.players):
+            player.act(actions[idx])
 
-    def render(self):
+        self.level.update()
+        states = self.level.get_states()
+
+        # reward is the score of each player
+        rewards = self.level.get_scores()
+        return states, rewards
+
+    def render(self, screen):
         """Draw the sprites and update."""
-        pass
+        events = pygame.event.get()
+        self.level.draw(screen)
 
     def reset(self):
         """Reinitialise game, resetting states."""
@@ -369,6 +402,14 @@ def add_text(screen, text, pos):
     screen.blit(font.render(text, True, (255,255,255)), pos)
 
 
+def random_action():
+    """Pick random action."""
+    if random.random() < 0.5:
+        return random.choice(ACTIONS)
+    else:
+        return None
+
+
 def main():
     """ Main Program """
     pygame.init()
@@ -379,37 +420,27 @@ def main():
 
     pygame.display.set_caption("Python self-learning project")
 
-    # Create the player
-    players = [Player(playerColor,[300,80]),
-                   Player(enemyColor,[500,80]),
-                   ]
+    # Initialise game
+    gladiator_game = Game()
 
-    # Create all the levels
-    level = SimpleLevel(players)
-
-    # Loop until the user clicks the close button.
-    done = False
+    # Loop over episodes
+    n_episodes = 1000
 
     # Used to manage how fast the screen updates
     clock = pygame.time.Clock()
-    player = players[1]
 
     # -------- Main Program Loop -----------
-    while not done:
+    for episode_idx in range(n_episodes):
 
-        for event in pygame.event.get():
-            if event.type == pygame.QUIT:
-                done = True
+        # Choose action for each player
+        actions = []
+        for _ in range(len(gladiator_game.players)):
+            actions.append(random_action())
 
-        # Let each player choose an action
-        for p in players:
-            p.choose_action()
+        states, rewards = gladiator_game.step(actions)
+        print(rewards)
 
-        # Update objects in the level
-        level.update()
-
-        # Draw the updates
-        level.draw(screen)
+        gladiator_game.render(screen)
 
         # Limit the frame rate to  60 fps
         clock.tick(60)
