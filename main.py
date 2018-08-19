@@ -367,6 +367,20 @@ class Game:
 
     def __init__(self):
         """Constructor."""
+
+        # Initiate pygame
+        pygame.init()
+
+        # Set screen parameters
+        self.size = [SCREEN_WIDTH,  SCREEN_HEIGHT]
+        self.screen = pygame.display.set_mode(self.size)
+        pygame.display.set_caption("Python self-learning project")
+
+        # Used to manage how fast the screen updates
+        self.clock = pygame.time.Clock()
+        self.fps = 60
+
+        
         # Create the players
         self.players = [Player(PLAYER_COLOR,[300, 80]), Player(ENEMY_COLOR,[500, 80])]
 
@@ -385,15 +399,24 @@ class Game:
         rewards = self.level.get_scores()
         return states, rewards
 
-    def render(self, screen):
+    def render(self):
         """Draw the sprites and update."""
         events = pygame.event.get()
-        self.level.draw(screen)
+        self.level.draw(self.screen)
+
+        # Limit the fps
+        self.clock.tick(self.fps)
+
+        # Go ahead and update the screen with what we've drawn.
+        pygame.display.flip()
 
     def reset(self):
         """Reinitialise game, resetting states."""
         # TODO: Test this!
         self.__init__()
+
+    def quit(self):
+        pygame.quit()
 
 
 # Display scores
@@ -412,22 +435,13 @@ def random_action():
 
 def main():
     """ Main Program """
-    pygame.init()
-
-    # Set the height and width of the screen
-    size = [SCREEN_WIDTH, SCREEN_HEIGHT]
-    screen = pygame.display.set_mode(size)
-
-    pygame.display.set_caption("Python self-learning project")
+    
 
     # Initialise game
     gladiator_game = Game()
 
     # Loop over episodes
     n_episodes = 1000
-
-    # Used to manage how fast the screen updates
-    clock = pygame.time.Clock()
 
     # -------- Main Program Loop -----------
     for episode_idx in range(n_episodes):
@@ -440,13 +454,11 @@ def main():
         states, rewards = gladiator_game.step(actions)
         print(rewards)
 
-        gladiator_game.render(screen)
+        gladiator_game.render()
 
-        # Limit the frame rate to  60 fps
-        clock.tick(60)
+        
 
-        # Go ahead and update the screen with what we've drawn.
-        pygame.display.flip()
+        
 
     # Be IDLE friendly. If you forget this line, the program will 'hang'
     # on exit.
