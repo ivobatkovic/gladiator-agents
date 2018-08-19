@@ -1,7 +1,7 @@
 import pygame, random
- 
+
 # Global constants
- 
+
 # Predefined colors
 background = (round(0.4*255),round(0.4*255),round(0.4*255))
 walls  = (0,0,0)
@@ -18,6 +18,7 @@ RIGHT = 'right'
 JUMP = 'jump'
 SHOOT = 'shoot'
 ACTIONS = [LEFT, RIGHT, JUMP, SHOOT]
+
 
 class Bullet(pygame.sprite.Sprite):
 
@@ -48,7 +49,7 @@ class Bullet(pygame.sprite.Sprite):
         block_hit_list = pygame.sprite.spritecollide(self, self.player.level.platform_list, False)
         if len(block_hit_list) > 0:
             self.player.level.bullet_list.remove(self)
-            self.player.bullets.remove(self)         
+            self.player.bullets.remove(self)
 
         # Check collision with other players
         block_hit_list  = pygame.sprite.spritecollide(self, self.player.level.player_list, False)
@@ -59,23 +60,23 @@ class Bullet(pygame.sprite.Sprite):
                     self.player.bullets.remove(self)
                     self.player.score += 1
                     other_player.score -= 1
- 
- 
+
+
 class Player(pygame.sprite.Sprite):
-    
+
     def __init__(self,color,position):
         """ Constructor function """
- 
+
         # Call the parent's constructor
         super().__init__()
- 
+
         # Create an image of the block, and fill it with a color.
         # This could also be an image loaded from the disk.
         width = 40
         height = 40
         self.image = pygame.Surface([width, height])
         self.image.fill(color)
- 
+
         # Set a referance to the image rect.
         self.rect = self.image.get_rect()
         self.rect.x, self.rect.y = position
@@ -135,7 +136,7 @@ class Player(pygame.sprite.Sprite):
                 self.rect.bottom = block.rect.top
             elif self.change_y < 0:
                 self.rect.top = block.rect.bottom
- 
+
             # Stop our vertical movement
             self.change_y = 0
 
@@ -147,11 +148,11 @@ class Player(pygame.sprite.Sprite):
                 self.rect.bottom = block.rect.top
             elif self.change_y < 0:
                 self.rect.top = block.rect.bottom
- 
+
             # Stop our vertical movement
             self.change_y = 0
 
- 
+
     def update(self):
         """ Move the player. """
 
@@ -165,20 +166,20 @@ class Player(pygame.sprite.Sprite):
         # Move up/down
         self.rect.y += self.change_y
         self.collision_check_y()
-    
- 
+
+
     def calc_grav(self):
         """ Calculate effect of gravity. """
         if self.change_y == 0:
             self.change_y = 1
         else:
             self.change_y += .35
- 
+
         # See if we are on the ground.
         if self.rect.y >= SCREEN_HEIGHT - self.rect.height and self.change_y >= 0:
             self.change_y = 0
             self.rect.y = SCREEN_HEIGHT - self.rect.height
- 
+
     def jump(self):
         """ Called when user hits 'jump' button. """
         # move down a bit and see if there is a platform below us.
@@ -187,22 +188,22 @@ class Player(pygame.sprite.Sprite):
         self.rect.y += 2
         platform_hit_list = pygame.sprite.spritecollide(self, self.level.platform_list, False)
         self.rect.y -= 2
- 
+
         # If it is ok to jump, set our speed upwards
         if len(platform_hit_list) > 0 or self.rect.bottom >= SCREEN_HEIGHT:
             self.change_y = -10
- 
+
     # Player-controlled movement:
     def go_left(self):
         """ Called when the user hits the left arrow. """
         self.change_x = -6
         self.direction = -1
- 
+
     def go_right(self):
         """ Called when the user hits the right arrow. """
         self.change_x = 6
         self.direction = 1
- 
+
     def stop(self):
         """ Called when the user lets off the keyboard. """
         self.change_x = 0
@@ -238,37 +239,37 @@ class Player(pygame.sprite.Sprite):
             return random.choice(ACTIONS)
         else:
             return None
- 
- 
+
+
 class Platform(pygame.sprite.Sprite):
     """ Platform the user can jump on """
- 
+
     def __init__(self, width, height):
         """ Platform constructor. Assumes constructed with user passing in
             an array of 5 numbers like what's defined at the top of this
             code. """
         super().__init__()
- 
+
         self.image = pygame.Surface([width, height])
         self.image.fill(walls)
- 
+
         self.rect = self.image.get_rect()
- 
- 
+
+
 class Level(object):
     """ This is a generic super-class used to define a level.
         Create a child class for each level with level-specific
         info. """
- 
+
     def __init__(self, players):
         """ Constructor. Pass in a handle to player. Needed for when moving platforms
             collide with the player. """
         self.platform_list = pygame.sprite.Group()
         self.players = players
-        for p in players : 
+        for p in players :
             p.level = self
             p.update_other_players()
-        
+
         self.bullet_list =  pygame.sprite.Group()
         self.player_list = pygame.sprite.Group()
         self.player_list.add(players)
@@ -278,70 +279,111 @@ class Level(object):
             player.index = index
             index+=1
 
-         
+
         # Background image
         self.background = None
- 
+
     # Update everythign on this level
     def update(self):
         """ Update everything in this level."""
         self.platform_list.update()
         self.bullet_list.update()
         self.player_list.update()
- 
+
     def draw(self, screen):
         """ Draw everything on this level. """
- 
+
         # Draw the background
         screen.fill(background)
- 
+
         # Draw all the sprite lists that we have
         self.platform_list.draw(screen)
         self.player_list.draw(screen)
         self.bullet_list.draw(screen)
- 
- 
+
+
 # Create platforms for the level
 class SimpleLevel(Level):
     """ Definition for level 1. """
- 
+
     def __init__(self, players):
         """ Create level 1. """
- 
+
         # Call the parent constructor
         Level.__init__(self, players)
- 
-    
+
+
         # Define all walls: width,height,x pos,y pos
         level = [[40, 480, 0, 0],
                  [40, 480, 600, 0],
                  [640, 40, 0, 0],
                  [640, 40, 0, 440],
                  ]
- 
+
         # Go through the array above and add platforms
         for platform in level:
             block = Platform(platform[0], platform[1])
             block.rect.x = platform[2]
             block.rect.y = platform[3]
             self.platform_list.add(block)
- 
- 
+
+
+class Game:
+    """Generic class to wrap around, with interfaces to run and interact with the game."""
+
+    def __init__(self):
+        """Constructor."""
+
+        # Can imagine this being re-used somehow if different games are created with
+        # different setups
+
+        # Create the players
+        player_a = Player(RED)
+        player_b = Player(BLUE)
+        self.players = [player_a, player_b]
+
+        # Create the level
+        self.level = SimpleLevel(self.players)
+
+        # Update each player's list of other players
+        for player in self.players:
+            player.update_others_list()
+
+    def step(self, actions):
+        """Step through one iteration of the game."""
+        self.level.update()
+
+    def render(self):
+        """Draw the sprites and update."""
+        pass
+
+    def reset(self):
+        """Reinitialise game, resetting states."""
+        # TODO: Test this!
+        self.__init__()
+
+
+# Display scores
+def add_text(screen, text, pos):
+    font = pygame.font.SysFont('ptmono', 20)
+    screen.blit(font.render(text, True, (255,255,255)), pos)
+
+
 def main():
     """ Main Program """
     pygame.init()
- 
+
     # Set the height and width of the screen
     size = [SCREEN_WIDTH, SCREEN_HEIGHT]
     screen = pygame.display.set_mode(size)
- 
+
     pygame.display.set_caption("Python self-learning project")
- 
+
     # Create the player
     players = [Player(playerColor,[300,80]),
                    Player(enemyColor,[500,80]),
                    ]
-    
+
     # Create all the levels
     level = SimpleLevel(players)
 
@@ -362,26 +404,23 @@ def main():
         # Let each player choose an action
         for p in players:
             p.choose_action()
- 
+
         # Update objects in the level
         level.update()
- 
+
         # Draw the updates
         level.draw(screen)
 
         # Limit the frame rate to  60 fps
         clock.tick(60)
- 
+
         # Go ahead and update the screen with what we've drawn.
         pygame.display.flip()
- 
+
     # Be IDLE friendly. If you forget this line, the program will 'hang'
     # on exit.
     pygame.quit()
- 
-# Display scores
-def add_text(screen, text, pos):
-    font = pygame.font.SysFont('ptmono', 20)
-    screen.blit(font.render(text, True, (255,255,255)), pos)
+
+
 if __name__ == "__main__":
     main()
