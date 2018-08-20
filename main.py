@@ -1,14 +1,15 @@
-"""Game."""
+"""Self-learning agents game."""
 
 import pygame, random
+import numpy as np
 
 # Global constants
 
 # Predefined colors
-BACKGROUND = (round(0.4*255),round(0.4*255),round(0.4*255))
-WALLS  = (0,0,0)
-PLAYER_COLOR = (round(0.85*255),round(0.325*255),round(0.0980*255))
-ENEMY_COLOR = (0, round(0.4470*255), round(0.7410*255))
+BACKGROUND = (round(0.4 * 255), round(0.4 * 255), round(0.4 * 255))
+WALLS  = (0, 0, 0)
+PLAYER_COLOR = (round(0.85 * 255), round(0.325 * 255), round(0.0980 * 255))
+ENEMY_COLOR = (0, round(0.4470 * 255), round(0.7410 * 255))
 
 # Screen dimensions
 SCREEN_WIDTH = 640
@@ -29,15 +30,15 @@ class Bullet(pygame.sprite.Sprite):
         """Constructor."""
         super().__init__()
 
-        self.image = pygame.Surface([10,5])
-        self.image.fill((255,255,255))
+        self.image = pygame.Surface([10, 5])
+        self.image.fill((255, 255, 255))
         self.rect = self.image.get_rect()
 
         # Attribute to know which player spawned the bullet
         self.player = player
         # Initial bullet direction  and position
         self.direction = player.direction
-        self.rect.x, self.rect.y = self.player.rect.x+20, self.player.rect.y+20
+        self.rect.x, self.rect.y = self.player.rect.x + 20, self.player.rect.y + 20
 
         # Bullet speed
         self.change_x = 10
@@ -45,7 +46,6 @@ class Bullet(pygame.sprite.Sprite):
 
     def update(self):
         """Move bullet and update scores."""
-
         # Update bullet position
         self.rect.x += self.direction * self.change_x
         self.rect.y += self.change_y
@@ -72,36 +72,35 @@ class Player(pygame.sprite.Sprite):
 
     def __init__(self,color,position):
         """Constructor."""
-
         # Call the parent's constructor
         super().__init__()
 
-        # Create an image of the block, and fill it with a color.
-        # This could also be an image loaded from the disk.
+        # create an image of the block, and fill it with a color
+        # this could also be an image loaded from the disk
         width = 40
         height = 40
         self.image = pygame.Surface([width, height])
         self.image.fill(color)
 
-        # Set a referance to the image rect.
+        # set a referance to the image rect.
         self.rect = self.image.get_rect()
         self.rect.x, self.rect.y = position
 
-        # Specify a random direction when spawning
-        self.direction = 1 - 2*random.randint(0,1)
+        # specify a random direction when spawning
+        self.direction = 1 - 2 * random.randint(0, 1)
 
-        # Set speed vector of player
+        # set speed vector of player
         self.change_x = 0
         self.change_y = 0
 
-        # List of bullet that the player spawns
+        # list of bullet that the player spawns
         self.bullets = []
 
-        # List of sprites we can bump against
+        # list of sprites we can bump against
         self.level = None
         self.other_players = None
 
-        # Score value when hitting a player or getting hit
+        # score value when hitting a player or getting hit
         self.score = 0
 
     def update_other_players(self):
@@ -111,64 +110,64 @@ class Player(pygame.sprite.Sprite):
 
     def collision_check_x(self):
         """Check collisions along x."""
-        # Check collisions with platforms
+        # check collisions with platforms
         block_hit_list = pygame.sprite.spritecollide(self, self.level.platform_list, False)
         for block in block_hit_list:
-            # If we are moving right,
+            # if we are moving right,
             # set our right side to the left side of the item we hit
             if self.change_x > 0:
                 self.rect.right = block.rect.left
             elif self.change_x < 0:
-                # Otherwise if we are moving left, do the opposite.
+                # otherwise if we are moving left, do the opposite
                 self.rect.left = block.rect.right
 
-        # Check collisions with other players
+        # check collisions with other players
         block_hit_list = pygame.sprite.spritecollide(self, self.other_players, False)
         for block in block_hit_list:
-            # If we are moving right,
+            # if we are moving right,
             # set our right side to the left side of the item we hit
             if self.change_x > 0:
                 self.rect.right = block.rect.left
             elif self.change_x < 0:
-                # Otherwise if we are moving left, do the opposite.
+                # otherwise if we are moving left, do the opposite
                 self.rect.left = block.rect.right
 
     def collision_check_y(self):
         """Check collisions along y."""
-        # Check collisions with platforms
+        # check collisions with platforms
         block_hit_list = pygame.sprite.spritecollide(self, self.level.platform_list, False)
         for block in block_hit_list:
-            # Reset our position based on the top/bottom of the object.
+            # reset our position based on the top/bottom of the object
             if self.change_y > 0:
                 self.rect.bottom = block.rect.top
             elif self.change_y < 0:
                 self.rect.top = block.rect.bottom
 
-            # Stop our vertical movement
+            # stop our vertical movement
             self.change_y = 0
 
-        # Check collisions with other players
+        # check collisions with other players
         block_hit_list = pygame.sprite.spritecollide(self, self.other_players, False)
         for block in block_hit_list:
-            # Reset our position based on the top/bottom of the object.
+            # reset our position based on the top/bottom of the object
             if self.change_y > 0:
                 self.rect.bottom = block.rect.top
             elif self.change_y < 0:
                 self.rect.top = block.rect.bottom
 
-            # Stop our vertical movement
+            # stop our vertical movement
             self.change_y = 0
 
     def update(self):
         """Move the player."""
-        # Gravity
+        # gravity
         self.calc_grav()
 
-        # Move left/right
+        # move left/right
         self.rect.x += self.change_x
         self.collision_check_x()
 
-        # Move up/down
+        # move up/down
         self.rect.y += self.change_y
         self.collision_check_y()
 
@@ -179,25 +178,24 @@ class Player(pygame.sprite.Sprite):
         else:
             self.change_y += .35
 
-        # See if we are on the ground.
+        # see if we are on the ground.
         if self.rect.y >= SCREEN_HEIGHT - self.rect.height and self.change_y >= 0:
             self.change_y = 0
             self.rect.y = SCREEN_HEIGHT - self.rect.height
 
     def jump(self):
         """Jump."""
-        # move down a bit and see if there is a platform below us.
-        # Move down 2 pixels because it doesn't work well if we only move down
-        # 1 when working with a platform moving down.
+        # move down a bit and see if there is a platform below us
+        # move down 2 pixels because it doesn't work well if we only move down
+        # 1 when working with a platform moving down
         self.rect.y += 2
         platform_hit_list = pygame.sprite.spritecollide(self, self.level.platform_list, False)
         self.rect.y -= 2
 
-        # If it is ok to jump, set our speed upwards
+        # if it is ok to jump, set our speed upwards
         if len(platform_hit_list) > 0 or self.rect.bottom >= SCREEN_HEIGHT:
             self.change_y = -10
 
-    # Player-controlled movement:
     def go_left(self):
         """Move left."""
         self.change_x = -6
@@ -214,7 +212,7 @@ class Player(pygame.sprite.Sprite):
 
     def shoot(self):
         """Shoot bullet."""
-        # Currently, allow only one bullet at the time
+        # currently, allow only one bullet at the time
         if  len(self.bullets) == 0 :
             bullet =  Bullet(self)
             self.bullets.append(bullet)
@@ -268,7 +266,7 @@ class Level(object):
             player.index = index
             index+=1
 
-        # Background image
+        # background image
         self.background = None
 
     def update(self):
@@ -311,16 +309,16 @@ class Level(object):
     def draw(self, screen):
         """Draw everything on this level."""
 
-        # Draw the background
+        # draw the background
         screen.fill(BACKGROUND)
 
-        # Draw all the sprite lists that we have
+        # draw all the sprite lists that we have
         self.platform_list.draw(screen)
         self.player_list.draw(screen)
         self.bullet_list.draw(screen)
 
 
-# Create platforms for the level
+# create platforms for the level
 class SimpleLevel(Level):
     """Definition of level."""
 
@@ -328,13 +326,13 @@ class SimpleLevel(Level):
         """Create level."""
         super().__init__(players)
 
-        # Define all walls: width,height,x pos,y pos
+        # define all walls: width, height, x pos, y pos
         level = [[40, 480, 0, 0],
                  [40, 480, 600, 0],
                  [640, 40, 0, 0],
                  [640, 40, 0, 440]]
 
-        # Go through the array above and add platforms
+        # go through the array above and add platforms
         for platform in level:
             block = Platform(platform[0], platform[1])
             block.rect.x = platform[2]
@@ -348,24 +346,23 @@ class Game:
     def __init__(self):
         """Constructor."""
 
-        # Initiate pygame
+        # initiate pygame
         pygame.init()
 
-        # Set screen parameters
+        # set screen parameters
         self.size = [SCREEN_WIDTH,  SCREEN_HEIGHT]
         self.screen = pygame.display.set_mode(self.size)
         pygame.display.set_caption("Python self-learning project")
 
-        # Used to manage how fast the screen updates
+        # control screen fps
         self.clock = pygame.time.Clock()
         self.fps = 60
 
+        # create the players
+        self.players = [Player(PLAYER_COLOR, [300, 80]),
+                        Player(ENEMY_COLOR, [500, 80])]
 
-        # Create the players
-        self.players = [Player(PLAYER_COLOR,[300, 80]),
-                        Player(ENEMY_COLOR,[500, 80])]
-
-        # Create the level
+        # create the level
         self.level = SimpleLevel(self.players)
 
     def step(self, actions):
@@ -380,20 +377,30 @@ class Game:
         rewards = self.level.get_scores()
         return states, rewards
 
-    def render(self):
-        """Draw the sprites and update."""
+    def render(self, mode=None):
+        """Draw the sprites and update.
+
+        Returns:
+            img (numpy.ndarray): if mode is 'rgb_array', returns screen as array
+
+        """
         events = pygame.event.get()
         self.level.draw(self.screen)
 
-        # Limit the fps
+        # limit the fps
         self.clock.tick(self.fps)
 
-        # Go ahead and update the screen with what we've drawn.
+        # update the screen
         pygame.display.flip()
 
+        # return screen as rgb array
+        if mode == 'rgb_array':
+            img = self.screen
+            img = pygame.surfarray.array3d(img).swapaxes(0, 1)
+            return img
+
     def reset(self):
-        """Reinitialise game, resetting states."""
-        # TODO: Test this!
+        """Reinitialise game, resetting states, scores."""
         self.__init__()
 
     def quit(self):
@@ -403,7 +410,7 @@ class Game:
 # Display scores
 def add_text(screen, text, pos):
     font = pygame.font.SysFont('ptmono', 20)
-    screen.blit(font.render(text, True, (255,255,255)), pos)
+    screen.blit(font.render(text, True, (255, 255, 255)), pos)
 
 
 def random_action():
@@ -417,27 +424,25 @@ def random_action():
 def main():
     """Main Program."""
 
-    # Initialise game
+    # initialise game
     gladiator_game = Game()
 
-    # Loop over episodes
+    # loop over episodes
     n_episodes = 1000
 
-    # -------- Main Program Loop -----------
+    # --------main loop-----------
     for episode_idx in range(n_episodes):
 
-        # Choose action for each player
+        # choose action for each player
         actions = []
         for _ in range(len(gladiator_game.players)):
             actions.append(random_action())
 
         states, rewards = gladiator_game.step(actions)
-        print(rewards)
 
         gladiator_game.render()
 
-    # Be IDLE friendly. If you forget this line, the program will 'hang'
-    # on exit.
+    # exit gracefully
     gladiator_game.quit()
 
 
