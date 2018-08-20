@@ -457,12 +457,9 @@ def main():
         gladiator_game.render()
 
         
-
-        
-
     # Be IDLE friendly. If you forget this line, the program will 'hang'
     # on exit.
-    pygame.quit()
+    gladiator_game.quit()
 
 
 if __name__ == "__main__":
