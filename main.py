@@ -34,30 +34,34 @@ class Bullet(pygame.sprite.Sprite):
         self.image.fill((255, 255, 255))
         self.rect = self.image.get_rect()
 
-        # Attribute to know which player spawned the bullet
+        # attribute to know which player spawned the bullet
         self.player = player
-        # Initial bullet direction  and position
+        # initial bullet direction and position
         self.direction = player.direction
         self.rect.x, self.rect.y = self.player.rect.x + 20, self.player.rect.y + 20
 
-        # Bullet speed
+        # bullet speed
         self.change_x = 10
         self.change_y = 0
 
     def update(self):
         """Move bullet and update scores."""
-        # Update bullet position
+        # update bullet position
         self.rect.x += self.direction * self.change_x
         self.rect.y += self.change_y
 
-        # Check collision with platforms in the arena
-        block_hit_list = pygame.sprite.spritecollide(self, self.player.level.platform_list, False)
+        # check collision with platforms in the arena
+        block_hit_list = pygame.sprite.spritecollide(self,
+                                                     self.player.level.platform_list,
+                                                     False)
         if len(block_hit_list) > 0:
             self.player.level.bullet_list.remove(self)
             self.player.bullets.remove(self)
 
-        # Check collision with other players
-        block_hit_list  = pygame.sprite.spritecollide(self, self.player.level.player_list, False)
+        # check collision with other players
+        block_hit_list  = pygame.sprite.spritecollide(self,
+                                                      self.player.level.player_list,
+                                                      False)
         for block in block_hit_list:
             for other_player in self.player.other_players:
                 if block is other_player:
@@ -72,7 +76,6 @@ class Player(pygame.sprite.Sprite):
 
     def __init__(self,color,position):
         """Constructor."""
-        # Call the parent's constructor
         super().__init__()
 
         # create an image of the block, and fill it with a color
@@ -172,7 +175,7 @@ class Player(pygame.sprite.Sprite):
         self.collision_check_y()
 
     def calc_grav(self):
-        """ Calculate effect of gravity. """
+        """Calculate effect of gravity."""
         if self.change_y == 0:
             self.change_y = 1
         else:
@@ -182,6 +185,35 @@ class Player(pygame.sprite.Sprite):
         if self.rect.y >= SCREEN_HEIGHT - self.rect.height and self.change_y >= 0:
             self.change_y = 0
             self.rect.y = SCREEN_HEIGHT - self.rect.height
+
+    def calc_rel_states(self, states):
+        """Calculate relative states.
+
+        Calculate relative states (position for now) of other players, bullets
+        w.r.t the player.
+
+        Args:
+            states (list of tuple): each tuple has state of player and its bullet
+
+        Returns:
+            rel_states (list of tuple): relative states (position for now)
+
+        """
+        rel_states = []
+        for state_pair in states:
+            player_state = state_pair[0]
+            bullet_state = state_pair[1]
+            player_state = (player_state[0] - self.rect.x,
+                            player_state[1] - self.rect.y,
+                            player_state[2],
+                            player_state[3])
+            if bullet_state is not None:
+                bullet_state = (bullet_state[0] - self.rect.x,
+                                bullet_state[1] - self.rect.y,
+                                bullet_state[2],
+                                bullet_state[3])
+            rel_states.append((player_state, bullet_state))
+        return rel_states
 
     def jump(self):
         """Jump."""
@@ -285,7 +317,7 @@ class Level(object):
         states = []
         for player in self.players:
             player_state = (player.rect.x, player.rect.y,
-                          player.change_x, player.change_y)
+                            player.change_x, player.change_y)
             if player.bullets:
                 bullet_state = (player.bullets[0].rect.x, player.bullets[0].rect.y,
                                 player.bullets[0].change_x, player.bullets[0].change_y)
@@ -439,6 +471,8 @@ def main():
             actions.append(random_action())
 
         states, rewards = gladiator_game.step(actions)
+        # NOTE: check if relative states are correct
+        # print(gladiator_game.players[1].calc_rel_states(states))
 
         gladiator_game.render()
 
