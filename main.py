@@ -269,7 +269,7 @@ class Platform(pygame.sprite.Sprite):
     """Platform the user can jump on."""
 
     def __init__(self, width, height):
-        """ Platform constructor."""
+        """Platform constructor."""
         super().__init__()
 
         self.image = pygame.Surface([width, height])
@@ -340,7 +340,6 @@ class Level(object):
 
     def draw(self, screen):
         """Draw everything on this level."""
-
         # draw the background
         screen.fill(BACKGROUND)
 
@@ -377,7 +376,6 @@ class Game:
 
     def __init__(self):
         """Constructor."""
-
         # initiate pygame
         pygame.init()
 
@@ -436,11 +434,13 @@ class Game:
         self.__init__()
 
     def quit(self):
+        """Quit pygame gracefully."""
         pygame.quit()
 
 
 # Display scores
 def add_text(screen, text, pos):
+    """Add text to game screen."""
     font = pygame.font.SysFont('ptmono', 20)
     screen.blit(font.render(text, True, (255, 255, 255)), pos)
 
@@ -454,8 +454,7 @@ def random_action():
 
 
 def main():
-    """Main Program."""
-
+    """Run game."""
     # initialise game
     gladiator_game = Game()
 
