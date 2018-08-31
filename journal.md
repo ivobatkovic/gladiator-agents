@@ -7,7 +7,7 @@
 ## Tasks
 
 - [x] Setup the basic game with 2 players, actions (left, right, jump, shoot).
-  - [x] Add basic game skeleton, with empty level and 2 players.
+  - [ ] Add basic game skeleton, with empty level and 2 players.
   - [x] Add bullets, check collision with bullets. Update score if bullet hits other player.
   - [x] Add wrapper class for the game.
   - [x] Add `step` method to get states (x_pos, y_pos, x_change, y_change) for player and bullet.

@@ -1,9 +1,18 @@
 """Self-learning agents game."""
 
+import math
+from itertools import count
 import pygame, random
 import numpy as np
+import torch
+import torch.nn.functional as F
+import torch.optim as optim
+
+from q_learn import EPS_START, EPS_END, EPS_DECAY, QNetwork, ReplayMemory
+from q_learn import Transition, GAMMA
 
 # Global constants
+TARGET_UPDATE = 50
 
 # Predefined colors
 BACKGROUND = (round(0.4 * 255), round(0.4 * 255), round(0.4 * 255))
@@ -19,14 +28,16 @@ SCREEN_HEIGHT = 480
 LEFT = 'left'
 RIGHT = 'right'
 JUMP = 'jump'
-SHOOT = 'shoot'
-ACTIONS = [LEFT, RIGHT, JUMP, SHOOT]
+SHOOT_LEFT = 'shoot_left'
+SHOOT_RIGHT = 'shoot_right'
+STOP = 'stop'
+ACTIONS = [LEFT, RIGHT, JUMP, SHOOT_LEFT, SHOOT_RIGHT, STOP]
 
 
 class Bullet(pygame.sprite.Sprite):
     """Generic bullet class."""
 
-    def __init__(self, player):
+    def __init__(self, player, direction):
         """Constructor."""
         super().__init__()
 
@@ -37,7 +48,7 @@ class Bullet(pygame.sprite.Sprite):
         # attribute to know which player spawned the bullet
         self.player = player
         # initial bullet direction and position
-        self.direction = player.direction
+        self.direction = direction
         self.rect.x, self.rect.y = self.player.rect.x + 20, self.player.rect.y + 20
 
         # bullet speed
@@ -66,7 +77,9 @@ class Bullet(pygame.sprite.Sprite):
             for other_player in self.player.other_players:
                 if block is other_player:
                     self.player.level.bullet_list.remove(self)
-                    self.player.bullets.remove(self)
+                    # might have already removed
+                    if self in self.player.bullets:
+                        self.player.bullets.remove(self)
                     self.player.score += 1
                     other_player.score -= 1
 
@@ -242,11 +255,19 @@ class Player(pygame.sprite.Sprite):
         """Set velocity to 0."""
         self.change_x = 0
 
-    def shoot(self):
-        """Shoot bullet."""
+    def shoot_left(self):
+        """Shoot bullet left."""
         # currently, allow only one bullet at the time
         if  len(self.bullets) == 0 :
-            bullet =  Bullet(self)
+            bullet =  Bullet(self, -1)
+            self.bullets.append(bullet)
+            self.level.bullet_list.add(bullet)
+
+    def shoot_right(self):
+        """Shoot bullet right."""
+        # currently, allow only one bullet at the time
+        if  len(self.bullets) == 0 :
+            bullet =  Bullet(self, 1)
             self.bullets.append(bullet)
             self.level.bullet_list.add(bullet)
 
@@ -259,10 +280,25 @@ class Player(pygame.sprite.Sprite):
                 self.go_right()
             elif action == JUMP:
                 self.jump()
-            elif action == SHOOT:
-                self.shoot()
-        else:
-            self.stop()
+            elif action == SHOOT_LEFT:
+                self.shoot_left()
+            elif action == SHOOT_RIGHT:
+                self.shoot_right()
+            elif action == STOP:
+                self.stop()
+
+    def get_inputs_from_states(self, states):
+        """Use states to create input to Q-Network."""
+        inputs = []
+        for state_pair in states:
+            player_state = state_pair[0]
+            bullet_state = state_pair[1]
+            if bullet_state is None:
+                bullet_state = torch.zeros(4)
+            inputs.append(torch.from_numpy(np.array(player_state)).float())
+            inputs.append(torch.from_numpy(np.array(bullet_state)).float())
+        inputs = torch.cat(inputs).unsqueeze(0)
+        return inputs
 
 
 class Platform(pygame.sprite.Sprite):
@@ -403,9 +439,16 @@ class Game:
         self.level.update()
         states = self.level.get_states()
 
-        # reward is the score of each player
-        rewards = self.level.get_scores()
-        return states, rewards
+        # return score of each player (which can be used as reward)
+        scores = self.level.get_scores()
+
+        for score in scores:
+            if score != 0:
+                done = True
+            else:
+                done = False
+
+        return states, scores, done
 
     def render(self, mode=None):
         """Draw the sprites and update.
@@ -447,14 +490,105 @@ def add_text(screen, text, pos):
 
 def random_action():
     """Pick random action."""
-    if random.random() < 0.5:
-        return random.choice(ACTIONS)
+    return random.choice(range(len(ACTIONS)))
+
+
+def select_action(q_net, states, steps_done):
+    """Select action using epsilon-greedy."""
+    sample = random.random()
+    eps_threshold = EPS_END + (EPS_START - EPS_END) * \
+        math.exp(-1. * steps_done / EPS_DECAY)
+    steps_done += 1
+    if sample > eps_threshold:
+        with torch.no_grad():
+            return q_net(states).max(1)[1].view(1, 1), steps_done
     else:
-        return None
+        return torch.tensor([[random.randrange(len(ACTIONS))]],
+                              dtype=torch.long), steps_done
 
 
-def main():
-    """Run game."""
+def create_batch_inputs(game, batch):
+    """Create batch of inputs to model."""
+    batch_size = len(batch.current_state)
+    state_batch = torch.zeros(batch_size, 16)
+    action_batch = torch.zeros(batch_size, 1)
+    reward_batch = torch.zeros(batch_size)
+    next_state_batch = torch.zeros(batch_size, 16)
+
+    # create state batch
+    for idx, states in enumerate(batch.current_state):
+        states_sample = []
+        rel_states = game.players[0].calc_rel_states(states)
+        for states in rel_states:
+            for state_pair in states:
+                if state_pair == None:
+                    state_inputs = torch.zeros(4)
+                else:
+                    state_inputs = torch.from_numpy(np.array(state_pair)).float()
+                states_sample.append(state_inputs)
+        states_sample = torch.cat(states_sample)
+        state_batch[idx] = states_sample
+
+    # create action batch
+    for idx, actions in enumerate(batch.action):
+        # player 1's action
+        action_batch[idx] = actions[0]
+
+    # create next state batch
+    for idx, states in enumerate(batch.next_state):
+        states_sample = []
+        rel_states = game.players[0].calc_rel_states(states)
+        for states in rel_states:
+            for state_pair in states:
+                if state_pair == None:
+                    state_inputs = torch.zeros(4)
+                else:
+                    state_inputs = torch.from_numpy(np.array(state_pair)).float()
+                states_sample.append(state_inputs)
+        states_sample = torch.cat(states_sample)
+        next_state_batch[idx] = states_sample
+
+    # create reward batch
+    for idx, scores in enumerate(batch.score):
+        # player 1's scores
+        reward_batch[idx] = scores[0]
+
+    return state_batch, action_batch, next_state_batch, reward_batch
+
+
+def optimize_model(game, memory, q_net, target_net, optimizer, batch_size):
+    """Perform one step of the optimization."""
+    if len(memory) < batch_size:
+        return
+    transitions = memory.sample(batch_size)
+    batch = Transition(*zip(*transitions))
+    state_batch, action_batch, next_state_batch, reward_batch = create_batch_inputs(game, batch)
+
+    # Compute Q(s_t, a) - the model computes Q(s_t), then we select the
+    # columns of actions taken
+    state_action_values = q_net(state_batch).gather(1, action_batch.long())
+
+    # Compute V(s_{t+1}) for all next states.
+    next_state_values = target_net(next_state_batch).max(1)[0].detach()
+
+    # Compute the expected Q values
+    expected_state_action_values = (next_state_values * GAMMA) + reward_batch
+
+    # Compute Huber loss
+    loss = F.smooth_l1_loss(state_action_values, expected_state_action_values.unsqueeze(1))
+
+    # print('Loss: {}'.format(loss.item()))
+
+    # Optimize the model
+    optimizer.zero_grad()
+    loss.backward()
+    for param in q_net.parameters():
+        param.grad.data.clamp_(-1, 1)
+    optimizer.step()
+
+
+def run_random_game():
+    """Run game with randomly acting players."""
     # initialise game
     gladiator_game = Game()
 
@@ -469,7 +603,7 @@ def main():
         for _ in range(len(gladiator_game.players)):
             actions.append(random_action())
 
-        states, rewards = gladiator_game.step(actions)
+        states, scores, done = gladiator_game.step(actions)
         # NOTE: check if relative states are correct
         # print(gladiator_game.players[1].calc_rel_states(states))
 
@@ -479,5 +613,97 @@ def main():
     gladiator_game.quit()
 
 
+def run_q_learning():
+    """Run game with q-learning player."""
+    # initialise game
+    gladiator_game = Game()
+
+    # score counts
+    pl_a_score, pl_b_score = 0, 0
+
+    # initialise q, target networks
+    # 16 inputs (states), 6 outputs (actions)
+    q_net = QNetwork(16, 32, len(ACTIONS))
+    target_net = QNetwork(16, 32, len(ACTIONS))
+    target_net.load_state_dict(q_net.state_dict())
+    target_net.eval()
+
+    # batch size
+    batch_size = 128
+
+    # optimizer
+    optimizer = optim.RMSprop(q_net.parameters())
+
+    # replay memory
+    memory = ReplayMemory(10000)
+
+    # loop over episodes
+    n_episodes = 100000
+
+    # model updates
+    steps_done = 0
+
+    # ----------episodes-----------
+    for episode_idx in range(n_episodes):
+
+        print('Running episode: {}, scores A:{}, B:{}'.format(episode_idx,
+                                                              pl_a_score,
+                                                              pl_b_score))
+
+        # reset the game and scores
+        gladiator_game.reset()
+
+        # get current state, relative to player 1
+        current_states = gladiator_game.level.get_states()
+        current_states = gladiator_game.players[0].calc_rel_states(current_states)
+
+        for t in count():
+
+            # use q-learning for first player
+            inputs_q_net = gladiator_game.players[0].get_inputs_from_states(current_states)
+            action_idx, steps_done = select_action(q_net, inputs_q_net, steps_done)
+            selected_action = ACTIONS[action_idx]
+
+            actions_idx, actions = [], []
+            actions_idx.append(action_idx) # player 1
+            actions.append(selected_action) # player 1
+
+            # player 2 acts randomly
+            r_action_idx = random_action()
+            r_action = ACTIONS[r_action_idx]
+            actions_idx.append(r_action_idx) # player 2
+            actions.append(r_action) # player 2
+
+            # take in game, get relative states
+            next_states, reward, done = gladiator_game.step(actions)
+            next_states = gladiator_game.players[0].calc_rel_states(next_states)
+
+            # add to experience replay memory
+            memory.push(current_states, actions_idx, next_states, reward)
+
+            # set next_state to current_state
+            current_states = next_states
+
+            # Perform one step of the optimization (on the target network)
+            optimize_model(gladiator_game, memory, q_net, target_net, optimizer,
+                           batch_size)
+
+            gladiator_game.render()
+
+            # termination condition.
+            if done:
+                pl_a_score += gladiator_game.players[0].score
+                pl_b_score += gladiator_game.players[1].score
+                break
+
+        # Update the target network
+        if episode_idx % TARGET_UPDATE == 0:
+            print('Updating target network ...')
+            target_net.load_state_dict(q_net.state_dict())
+
+    # exit gracefully
+    gladiator_game.quit()
+
+
 if __name__ == "__main__":
-    main()
+    run_q_learning()
