@@ -1,9 +1,11 @@
 """Self-learning agents game."""
 
 import math
+import time
 from itertools import count
 import pygame, random
 import numpy as np
+import matplotlib.pyplot as plt
 import torch
 import torch.nn.functional as F
 import torch.optim as optim
@@ -12,7 +14,7 @@ from q_learn import EPS_START, EPS_END, EPS_DECAY, QNetwork, ReplayMemory
 from q_learn import Transition, GAMMA
 
 # Global constants
-TARGET_UPDATE = 50
+TARGET_UPDATE = 10
 
 # Predefined colors
 BACKGROUND = (round(0.4 * 255), round(0.4 * 255), round(0.4 * 255))
@@ -21,8 +23,11 @@ PLAYER_COLOR = (round(0.85 * 255), round(0.325 * 255), round(0.0980 * 255))
 ENEMY_COLOR = (0, round(0.4470 * 255), round(0.7410 * 255))
 
 # Screen dimensions
-SCREEN_WIDTH = 640
-SCREEN_HEIGHT = 480
+SCREEN_WIDTH = 320
+SCREEN_HEIGHT = 240
+WALL_WIDTH = int(SCREEN_WIDTH / 16)
+PLAYER_SIZE = int(SCREEN_WIDTH / 16)
+BULLET_SIZE = min(8, int(SCREEN_WIDTH / 32))
 
 # Actions
 LEFT = 'left'
@@ -41,7 +46,7 @@ class Bullet(pygame.sprite.Sprite):
         """Constructor."""
         super().__init__()
 
-        self.image = pygame.Surface([10, 5])
+        self.image = pygame.Surface([BULLET_SIZE, BULLET_SIZE])
         self.image.fill((255, 255, 255))
         self.rect = self.image.get_rect()
 
@@ -49,7 +54,7 @@ class Bullet(pygame.sprite.Sprite):
         self.player = player
         # initial bullet direction and position
         self.direction = direction
-        self.rect.x, self.rect.y = self.player.rect.x + 20, self.player.rect.y + 20
+        self.rect.x, self.rect.y = self.player.rect.x + 10, self.player.rect.y + 10
 
         # bullet speed
         self.change_x = 10
@@ -87,14 +92,14 @@ class Bullet(pygame.sprite.Sprite):
 class Player(pygame.sprite.Sprite):
     """Generic player class."""
 
-    def __init__(self,color,position):
+    def __init__(self, color, position):
         """Constructor."""
         super().__init__()
 
         # create an image of the block, and fill it with a color
         # this could also be an image loaded from the disk
-        width = 40
-        height = 40
+        width = PLAYER_SIZE
+        height = PLAYER_SIZE
         self.image = pygame.Surface([width, height])
         self.image.fill(color)
 
@@ -394,10 +399,10 @@ class SimpleLevel(Level):
         super().__init__(players)
 
         # define all walls: width, height, x pos, y pos
-        level = [[40, 480, 0, 0],
-                 [40, 480, 600, 0],
-                 [640, 40, 0, 0],
-                 [640, 40, 0, 440]]
+        level = [[WALL_WIDTH, SCREEN_HEIGHT, 0, 0],
+                 [WALL_WIDTH, SCREEN_HEIGHT, SCREEN_WIDTH - WALL_WIDTH, 0],
+                 [SCREEN_WIDTH, WALL_WIDTH, 0, 0],
+                 [SCREEN_WIDTH, WALL_WIDTH, 0, SCREEN_HEIGHT - WALL_WIDTH]]
 
         # go through the array above and add platforms
         for platform in level:
@@ -422,11 +427,11 @@ class Game:
 
         # control screen fps
         self.clock = pygame.time.Clock()
-        self.fps = 60
+        self.fps = 120
 
         # create the players
-        self.players = [Player(PLAYER_COLOR, [300, 80]),
-                        Player(ENEMY_COLOR, [500, 80])]
+        self.players = [Player(PLAYER_COLOR, [random.randint(40, 240), random.randint(40, 120)]),
+                        Player(ENEMY_COLOR, [random.randint(40, 240), random.randint(40, 120)])]
 
         # create the level
         self.level = SimpleLevel(self.players)
@@ -491,6 +496,7 @@ def add_text(screen, text, pos):
 def random_action():
     """Pick random action."""
     return random.choice(range(len(ACTIONS)))
+    # return random.choice([3, 4, 5, 5])
 
 
 def select_action(q_net, states, steps_done):
@@ -582,9 +588,22 @@ def optimize_model(game, memory, q_net, target_net, optimizer, batch_size):
     # Optimize the model
     optimizer.zero_grad()
     loss.backward()
-    for param in q_net.parameters():
-        param.grad.data.clamp_(-1, 1)
     optimizer.step()
+
+
+def plot_scores(pl_a_scores, pl_b_scores):
+    """Plot scores over episodes."""
+    x = range(len(pl_a_scores))
+    plt.figure()
+    plt.plot(x, pl_a_scores, 'r--', label="Score-Player A")
+    plt.plot(x, pl_b_scores, 'b--', label="Score-Player B")
+
+    plt.title("Self-learning agents scores")
+    plt.xlabel("Episode")
+    plt.ylabel("Cumulative Score")
+
+    plt.legend()
+    plt.show()
 
 
 def run_random_game():
@@ -593,7 +612,7 @@ def run_random_game():
     gladiator_game = Game()
 
     # loop over episodes
-    n_episodes = 1000
+    n_episodes = 10000
 
     # --------main loop-----------
     for episode_idx in range(n_episodes):
@@ -617,9 +636,11 @@ def run_q_learning():
     """Run game with q-learning player."""
     # initialise game
     gladiator_game = Game()
+    random.seed(5234)
 
     # score counts
     pl_a_score, pl_b_score = 0, 0
+    pl_a_scores, pl_b_scores = [], []
 
     # initialise q, target networks
     # 16 inputs (states), 6 outputs (actions)
@@ -629,7 +650,7 @@ def run_q_learning():
     target_net.eval()
 
     # batch size
-    batch_size = 128
+    batch_size = 32
 
     # optimizer
     optimizer = optim.RMSprop(q_net.parameters())
@@ -638,7 +659,7 @@ def run_q_learning():
     memory = ReplayMemory(10000)
 
     # loop over episodes
-    n_episodes = 100000
+    n_episodes = 1000
 
     # model updates
     steps_done = 0
@@ -649,6 +670,9 @@ def run_q_learning():
         print('Running episode: {}, scores A:{}, B:{}'.format(episode_idx,
                                                               pl_a_score,
                                                               pl_b_score))
+        # keep track of scores
+        pl_a_scores.append(pl_a_score)
+        pl_b_scores.append(pl_b_score)
 
         # reset the game and scores
         gladiator_game.reset()
@@ -703,6 +727,9 @@ def run_q_learning():
 
     # exit gracefully
     gladiator_game.quit()
+
+    # plot scores
+    plot_scores(pl_a_scores, pl_b_scores)
 
 
 if __name__ == "__main__":

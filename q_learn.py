@@ -12,8 +12,8 @@ import torch.nn.functional as F
 
 EPS_START = 0.9
 EPS_END = 0.05
-EPS_DECAY = 200
-GAMMA = 0.99
+EPS_DECAY = 20000
+GAMMA = 0.999
 
 Transition = namedtuple('Transition',
                         ('current_state', 'action', 'next_state', 'score'))
