@@ -11,10 +11,7 @@ import torch.nn.functional as F
 import torch.optim as optim
 from torch.distributions import Categorical
 
-from policy_gradient import Policy
-
-# Global constants
-TARGET_UPDATE = 10
+from policy_gradients import Policy
 
 # Predefined colors
 BACKGROUND = (round(0.4 * 255), round(0.4 * 255), round(0.4 * 255))
@@ -559,7 +556,7 @@ def run_policy_gradient():
     pl_a_score, pl_b_score = 0, 0
     pl_a_scores, pl_b_scores = [], []
 
-    # initialise q, target networks
+    # initialise policy network
     # 16 inputs (states), 6 outputs (actions)
     policy_net = Policy(16, 32, len(ACTIONS))
 
@@ -572,7 +569,7 @@ def run_policy_gradient():
     # loop over episodes
     n_episodes = 1000
 
-    # Batch History
+    # batch History
     state_pool = []
     action_pool = []
     reward_pool = []
@@ -612,7 +609,7 @@ def run_policy_gradient():
             actions_idx.append(r_action_idx) # player 2
             actions.append(r_action) # player 2
 
-            # take in game, get relative states
+            # step through game, get relative states
             next_states, reward, done = gladiator_game.step(actions)
             next_states = gladiator_game.players[0].calc_rel_states(next_states)
 
