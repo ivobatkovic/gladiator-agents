@@ -227,6 +227,8 @@ class Player(pygame.sprite.Sprite):
                                 bullet_state[1] - self.rect.y,
                                 bullet_state[2],
                                 bullet_state[3])
+            else:
+                bullet_state = (0,0,0,0)
             rel_states.append((player_state, bullet_state))
         return rel_states
 
@@ -592,6 +594,11 @@ def run_policy_gradient():
         current_states = gladiator_game.level.get_states()
         current_states = gladiator_game.players[0].calc_rel_states(current_states)
 
+        episode_reward_sum = 0
+        episode_states = []
+        episode_actions = []
+        episode_rewards = []
+        # loop over the game
         for t in count():
 
             # sample action for player 1
@@ -613,15 +620,51 @@ def run_policy_gradient():
             next_states, reward, done = gladiator_game.step(actions)
             next_states = gladiator_game.players[0].calc_rel_states(next_states)
 
-            # TODO: Implement the policy gradient stuff here
+            # Store the states, actions and rewards
+            episode_states.append(current_states)
 
+            action_ = np.zeros((1,len(ACTIONS)))
+            action_[0,action_idx] = 1
+            episode_actions.append(action_)
+
+            episode_rewards.append(reward[0])
+
+            # render game
             gladiator_game.render()
 
             # termination condition.
             if done:
+                # Compute total reward
+                episode_reward_sum = np.sum(episode_rewards)
+                print(episode_reward_sum)
+
+                # Discounted rewards
+                discounted_episode_rewards = discount_and_normalize_rewards(episode_rewards)
+
+                # Prepare state vector
+                input_states = np.zeros((t+1,16))
+                for k in range(0,t+1):
+
+                    rel_states = []
+                    states = episode_states[k]
+                    for state_pair in states:
+                        player_state = state_pair[0]
+                        bullet_state = state_pair[1]
+                        rel_states = np.hstack([rel_states,player_state,bullet_state])
+
+                    input_states[k,:] = rel_states[:,None].transpose()
+
+                # Prepare labels
+                labels = np.vstack(episode_actions)
+
+                # Prepare discounted reward
+                discounted_reward = discounted_episode_rewards[:,None]
+
                 pl_a_score += gladiator_game.players[0].score
                 pl_b_score += gladiator_game.players[1].score
                 break
+
+            current_states = next_states
 
     # exit gracefully
     gladiator_game.quit()
@@ -629,6 +672,18 @@ def run_policy_gradient():
     # plot scores
     plot_scores(pl_a_scores, pl_b_scores)
 
+def discount_and_normalize_rewards(episode_rewards,gamma=0.99):
+    discounted_episode_rewards = np.zeros_like(episode_rewards)
+    cumulative = 0.0
+    for i in reversed(range(len(episode_rewards))):
+        cumulative = cumulative * gamma + episode_rewards[i]
+        discounted_episode_rewards[i] = cumulative
+
+    mean = np.mean(discounted_episode_rewards)
+    std = np.std(discounted_episode_rewards)
+    discounted_episode_rewards = (discounted_episode_rewards - mean) / (std)
+
+    return discounted_episode_rewards
 
 if __name__ == "__main__":
     run_policy_gradient()
