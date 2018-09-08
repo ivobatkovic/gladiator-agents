@@ -9,9 +9,9 @@ import matplotlib.pyplot as plt
 import torch
 import torch.nn.functional as F
 import torch.optim as optim
+from torch.distributions import Categorical
 
-from q_learn import EPS_START, EPS_END, EPS_DECAY, QNetwork, ReplayMemory
-from q_learn import Transition, GAMMA, create_batch_inputs, optimize_model
+from policy_gradient import Policy
 
 # Global constants
 TARGET_UPDATE = 10
@@ -499,18 +499,13 @@ def random_action():
     return random.choice([3, 2, 4, 5, 5])
 
 
-def select_action(q_net, states, steps_done):
-    """Select action using epsilon-greedy."""
-    sample = random.random()
-    eps_threshold = EPS_END + (EPS_START - EPS_END) * \
-        math.exp(-1. * steps_done / EPS_DECAY)
-    steps_done += 1
-    if sample > eps_threshold:
-        with torch.no_grad():
-            return q_net(states).max(1)[1].view(1, 1), steps_done
-    else:
-        return torch.tensor([[random.randrange(len(ACTIONS))]],
-                              dtype=torch.long), steps_done
+def select_action(policy_net, state):
+    """Select action from the policy net."""
+    probs = policy_net(state)
+    m = Categorical(probs)
+    action = m.sample()
+    policy_net.saved_log_probs.append(m.log_prob(action))
+    return action.item()
 
 
 def plot_scores(pl_a_scores, pl_b_scores):
@@ -554,8 +549,8 @@ def run_random_game():
     gladiator_game.quit()
 
 
-def run_q_learning():
-    """Run game with q-learning player."""
+def run_policy_gradient():
+    """Run game with policy-gradient learning."""
     # initialise game
     gladiator_game = Game()
     random.seed(5234)
@@ -566,25 +561,22 @@ def run_q_learning():
 
     # initialise q, target networks
     # 16 inputs (states), 6 outputs (actions)
-    q_net = QNetwork(16, 32, len(ACTIONS))
-    target_net = QNetwork(16, 32, len(ACTIONS))
-    target_net.load_state_dict(q_net.state_dict())
-    target_net.eval()
+    policy_net = Policy(16, 32, len(ACTIONS))
 
     # batch size
-    batch_size = 128
+    batch_size = 16
 
     # optimizer
-    optimizer = optim.RMSprop(q_net.parameters())
-
-    # replay memory
-    memory = ReplayMemory(10000)
+    optimizer = optim.RMSprop(policy_net.parameters())
 
     # loop over episodes
-    n_episodes = 50000
+    n_episodes = 1000
 
-    # model updates
-    steps_done = 0
+    # Batch History
+    state_pool = []
+    action_pool = []
+    reward_pool = []
+    steps = 0
 
     # ----------episodes-----------
     for episode_idx in range(n_episodes):
@@ -605,9 +597,9 @@ def run_q_learning():
 
         for t in count():
 
-            # use q-learning for first player
-            inputs_q_net = gladiator_game.players[0].get_inputs_from_states(current_states)
-            action_idx, steps_done = select_action(q_net, inputs_q_net, steps_done)
+            # sample action for player 1
+            inputs_policy_net = gladiator_game.players[0].get_inputs_from_states(current_states)
+            action_idx = select_action(policy_net, inputs_policy_net)
             selected_action = ACTIONS[action_idx]
 
             actions_idx, actions = [], []
@@ -624,15 +616,7 @@ def run_q_learning():
             next_states, reward, done = gladiator_game.step(actions)
             next_states = gladiator_game.players[0].calc_rel_states(next_states)
 
-            # add to experience replay memory
-            memory.push(current_states, actions_idx, next_states, reward)
-
-            # set next_state to current_state
-            current_states = next_states
-
-            # Perform one step of the optimization (on the target network)
-            optimize_model(gladiator_game, memory, q_net, target_net, optimizer,
-                           batch_size)
+            # TODO: Implement the policy gradient stuff here
 
             gladiator_game.render()
 
@@ -642,11 +626,6 @@ def run_q_learning():
                 pl_b_score += gladiator_game.players[1].score
                 break
 
-        # Update the target network
-        if episode_idx % TARGET_UPDATE == 0:
-            print('Updating target network ...')
-            target_net.load_state_dict(q_net.state_dict())
-
     # exit gracefully
     gladiator_game.quit()
 
@@ -655,4 +634,4 @@ def run_q_learning():
 
 
 if __name__ == "__main__":
-    run_q_learning()
+    run_policy_gradient()
